@@ -96,23 +96,36 @@ fi
 
 echo "=== 8. Настройка UFW (Firewall) ==="
 # Базовые разрешенные порты
-sudo ufw allow 22/tcp
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp
+sudo ufw allow 22/tcp || true
+sudo ufw allow 80/tcp || true
+sudo ufw allow 443/tcp || true
 
 # Интерактивный запрос дополнительных портов
 echo ""
-echo "Введите дополнительные порты для открытия (например: 44350/tcp 8080/udp)."
+echo "Введите дополнительные порты для открытия (например: 44310/tcp 44311/tcp)."
 read -p "Порты через пробел (или Enter, чтобы пропустить): " CUSTOM_PORTS
 
 if [ -n "$CUSTOM_PORTS" ]; then
+    # Очищаем ввод от возможных скрытых символов (например, Windows-переводов строк \r)
+    CUSTOM_PORTS=$(echo "$CUSTOM_PORTS" | tr -d '\r')
+    
     for PORT in $CUSTOM_PORTS; do
-        sudo ufw allow $PORT
-        echo "Порт $PORT открыт."
+        # Пропускаем, если пользователь случайно ввел стандартные порты
+        if [[ "$PORT" =~ ^(22|80|443)(/.*)?$ ]]; then
+            echo "ℹ️ Порт $PORT является базовым и уже открыт, пропускаем."
+            continue
+        fi
+        
+        # Пытаемся открыть порт. Если формат неверный, скрипт не упадет благодаря конструкции с if
+        if sudo ufw allow "$PORT"; then
+            echo "✅ Порт $PORT успешно открыт."
+        else
+            echo "⚠️ Ошибка: не удалось открыть порт '$PORT'. Проверьте формат (например: 44310/tcp)."
+        fi
     done
 fi
 
-# Включение UFW (с флагом --force, чтобы не спрашивал подтверждения прерывания SSH)
+# Включение UFW
 echo "Включаем брандмауэр..."
 sudo ufw --force enable
 
