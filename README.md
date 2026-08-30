@@ -25,4 +25,4 @@
 Вы можете запустить скрипт одной командой напрямую из GitHub, не клонируя репозиторий:
 
 ```bash
-bash <(curl -fsSL [https://raw.githubusercontent.com/gismatullinrinat/amaterashimasu/main/setup.sh](https://raw.githubusercontent.com/gismatullinrinat/amaterashimasu/main/setup.sh))
+bash <(curl -fsSL https://raw.githubusercontent.com/gismatullinrinat/amaterashimasu/main/setup.sh)
