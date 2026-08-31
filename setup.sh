@@ -58,47 +58,38 @@ else
 fi
 sudo systemctl restart systemd-journald
 
-echo "=== 7. Интерактивный выпуск SSL-сертификата (Certbot) ==="
-read -p "Введите ваш домен (например, lt.amaterashimasu.xyz) или нажмите Enter для пропуска: " DOMAIN
+echo "=== 7. Подготовка каталогов для Remnanode и Сертификатов ==="
+mkdir -p /opt/remnanode/certs
+chmod 755 /opt/remnanode/certs
+
+read -p "Введите ваш домен (например, de-s0.amaterashimasu.xyz) или нажмите Enter: " DOMAIN
 
 if [ -n "$DOMAIN" ]; then
-    echo "Проверка IP-адреса домена..."
-    # Получаем текущий публичный IPv4 вашего сервера
-    SERVER_IP=$(curl -s -4 ifconfig.me || curl -s -4 api.ipify.org)
-    
-    # Получаем IP-адрес, на который указывает домен
-    DOMAIN_IP=$(dig +short A "$DOMAIN" | tail -n1)
+    DOMAIN=$(echo "$DOMAIN" | tr -d '\r')
+    CADDY_CERT_PATH="/var/lib/docker/volumes/amaterashimasu_caddy_data/_data/caddy/certificates/acme-v02.api.letsencrypt.org-directory/$DOMAIN"
 
-    echo "IP сервера: $SERVER_IP"
-    echo "IP домена ($DOMAIN): ${DOMAIN_IP:-'Не найден / Не резолвится'}"
-
-    if [ "$SERVER_IP" = "$DOMAIN_IP" ]; then
-        echo "✅ IP-адреса совпадают! Запускаем выпуск SSL..."
-        # Останавливаем веб-сервер, если вдруг он уже запущен и занимает 80 порт
-        sudo ufw allow 80/tcp
-        sudo certbot certonly --standalone -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email || true
-        
-        mkdir -p /opt/remnanode/certs
-        if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
-            cp "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" /opt/remnanode/certs/
-            cp "/etc/letsencrypt/live/$DOMAIN/privkey.pem" /opt/remnanode/certs/
-            echo "✅ Сертификаты успешно скопированы в /opt/remnanode/certs/"
-        else
-            echo "⚠️ Ошибка: не удалось найти выпущенные сертификаты."
-        fi
+    echo "Проверка наличия сертификатов Caddy..."
+    if [ -f "$CADDY_CERT_PATH/$DOMAIN.crt" ]; then
+        cp -L "$CADDY_CERT_PATH/$DOMAIN.crt" /opt/remnanode/certs/fullchain.pem
+        cp -L "$CADDY_CERT_PATH/$DOMAIN.key" /opt/remnanode/certs/privkey.pem
+        chmod 644 /opt/remnanode/certs/*
+        echo "✅ Сертификаты Caddy успешно скопированы в /opt/remnanode/certs/"
     else
-        echo "❌ Ошибка: IP-адрес домена ($DOMAIN_IP) не совпадает с IP сервера ($SERVER_IP)."
-        echo "Выпуск SSL пропущен. Убедитесь, что A-запись обновилась, и запустите Certbot вручную позже."
+        echo "⚠️ Сертификаты Caddy пока не найдены по пути: $CADDY_CERT_PATH"
+        echo "Они будут скопированы автоматически службой Cron после запуска Caddy."
     fi
-else
-    echo "Выпуск SSL пропущен."
+
+    # Автоматическая настройка Cron для ротации сертификатов каждые 12 часов
+    CRON_CMD="0 */12 * * * cp -L $CADDY_CERT_PATH/$DOMAIN.crt /opt/remnanode/certs/fullchain.pem && cp -L $CADDY_CERT_PATH/$DOMAIN.key /opt/remnanode/certs/privkey.pem && chmod 644 /opt/remnanode/certs/*"
+    ( sudo crontab -l 2>/dev/null | grep -v "$DOMAIN" ; echo "$CRON_CMD" ) | sudo crontab -
+    echo "✅ Задача автообновления сертификатов добавлена в crontab."
 fi
 
 echo "=== 8. Настройка UFW (Firewall) ==="
 # Базовые разрешенные порты
 sudo ufw allow 22/tcp || true
 sudo ufw allow 80/tcp || true
-sudo ufw allow 443/tcp || true
+sudo ufw allow 443 || true
 
 # Интерактивный запрос дополнительных портов
 echo ""
